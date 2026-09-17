@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">CodeServer</string>
+    <string name="load_failure_message">code-server에 연결할 수 없습니다. 네트워크와 서버 상태를 확인하세요.</string>
+</resources>
