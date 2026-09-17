@@ -6,7 +6,7 @@
 
 **Architecture:** Single-`Activity`, single-`WebView` Kotlin app. No other screens, no ViewModel/data layer — this is a thin configuration shell around the platform `WebView`.
 
-**Tech Stack:** Kotlin, Gradle (Kotlin DSL) with the version catalog-free `plugins {}` block, AGP 9.3.1, Kotlin Android plugin 2.4.0, Gradle 9.3.1, `androidx.core:core-ktx:1.13.1`, `androidx.activity:activity-ktx:1.9.3`. `compileSdk`/`targetSdk` 36, `minSdk` 26 (needed for the adaptive-icon-only launcher icon, no legacy PNG fallback required).
+**Tech Stack:** Kotlin, Gradle (Kotlin DSL) with the version catalog-free `plugins {}` block, AGP 9.3.1 (Kotlin support is built into `com.android.application` as of AGP 9 — no separate Kotlin Gradle plugin), Gradle 9.5.0, `androidx.core:core-ktx:1.13.1`, `androidx.activity:activity-ktx:1.9.3`. `compileSdk`/`targetSdk` 36, `minSdk` 26 (needed for the adaptive-icon-only launcher icon, no legacy PNG fallback required).
 
 **Spec:** [docs/superpowers/specs/2026-09-17-webview-code-server-app-design.md](../specs/2026-09-17-webview-code-server-app-design.md)
 
@@ -24,29 +24,33 @@
 
 ## Environment Notes (read before Task 1)
 
-This machine already has everything needed to build fully offline:
+This machine already has everything needed to build fully offline (verified with a real `assembleDebug` dry run of this exact plan's files before Task 1 was dispatched — see the ledger's pre-flight scan):
 - JDK 17 at `$JAVA_HOME` (`C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot`).
 - Android SDK at `C:\dev\android-sdk` with platform `android-36` and build-tools `36.0.0` already installed, and SDK licenses already accepted.
-- Gradle 9.3.1 (`all` distribution) already unpacked under `~/.gradle/wrapper/dists/gradle-9.3.1-all/`, and AGP 9.3.1 / Kotlin Android plugin 2.4.0 / the AndroidX artifacts this plan uses are already present in `~/.gradle/caches/modules-2`.
+- Gradle 9.5.0 (`bin` distribution) already unpacked under `~/.gradle/wrapper/dists/gradle-9.5.0-bin/`, and AGP 9.3.1 / the AndroidX artifacts this plan uses are already present in `~/.gradle/caches/modules-2`.
 
-Because of this, Task 1 generates the Gradle wrapper using the already-unpacked local Gradle 9.3.1 binary (no download), and every `./gradlew` command in later tasks should resolve entirely from local caches.
+**Toolchain note:** AGP 9.3.1 requires Gradle ≥9.5.0 (Gradle 9.3.1 is too old for it) and, as of AGP 9, no longer accepts a separate `org.jetbrains.kotlin.android` plugin — Kotlin support is built directly into `com.android.application`. Do not add a Kotlin Gradle plugin anywhere in this project; the Kotlin blocks below reflect this already.
+
+Because of this, Task 1 generates the Gradle wrapper using the already-unpacked local Gradle 9.5.0 binary (no download), and every `./gradlew` command in later tasks should resolve entirely from local caches (one transitive dependency, `androidx.collection:collection:1.0.0`, was not pre-cached and was fetched once during the pre-flight dry run — it is cached now, so later `./gradlew` runs in this plan do not need network access either).
 
 ---
 
 ### Task 1: Gradle project scaffolding and wrapper
 
 **Files:**
+- Create or modify: `.gitignore` (a root `.gitignore` containing only `.worktrees/` already exists in this worktree from earlier repo setup — append to it, do not overwrite it)
 - Create: `settings.gradle.kts`
 - Create: `build.gradle.kts`
 - Create: `gradle.properties`
 - Create: `local.properties`
-- Create: `.gitignore`
 - Create (generated): `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`, `gradle/wrapper/gradle-wrapper.properties`
 
 **Interfaces:**
-- Produces: a working Gradle wrapper (`./gradlew`) and an `:app` module reference in `settings.gradle.kts` that Task 2 will populate.
+- Produces: a working Gradle wrapper (`./gradlew`) and `settings.gradle.kts`/`build.gradle.kts` for Task 2 to extend (Task 2 adds `include(":app")` to `settings.gradle.kts` once the `app/` directory exists — do NOT add that line in this task, see Step 2).
 
-- [ ] **Step 1: Create `.gitignore`**
+- [ ] **Step 1: Append to the existing `.gitignore`**
+
+This worktree already has a root `.gitignore` containing exactly `.worktrees/` (unrelated repo-level setup, done before this plan). Append these lines to it — do not replace the file:
 
 ```gitignore
 *.iml
@@ -62,6 +66,8 @@ Because of this, Task 1 generates the Gradle wrapper using the already-unpacked 
 ```
 
 - [ ] **Step 2: Create `settings.gradle.kts`**
+
+Deliberately no `include(":app")` yet — the `app/` directory doesn't exist until Task 2, and Gradle refuses to configure an `include()`d project whose directory is missing (verified: `BUILD FAILED` with "Configuring project ':app' without an existing directory is not allowed"). Task 2 appends the `include(":app")` line once the directory exists.
 
 ```kotlin
 pluginManagement {
@@ -81,15 +87,15 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "CodeServer"
-include(":app")
 ```
 
 - [ ] **Step 3: Create root `build.gradle.kts`**
 
+Only the Android Gradle Plugin — no separate Kotlin plugin (AGP 9's built-in Kotlin support handles `.kt` sources):
+
 ```kotlin
 plugins {
     id("com.android.application") version "9.3.1" apply false
-    id("org.jetbrains.kotlin.android") version "2.4.0" apply false
 }
 ```
 
@@ -109,13 +115,13 @@ This file is machine-specific and is excluded by `.gitignore` from Step 1 — it
 sdk.dir=C:/dev/android-sdk
 ```
 
-- [ ] **Step 6: Generate the Gradle wrapper from the locally cached Gradle 9.3.1 distribution**
+- [ ] **Step 6: Generate the Gradle wrapper from the locally cached Gradle 9.5.0 distribution**
 
-Locate the cached Gradle 9.3.1 binary and use it to generate the wrapper (this avoids any network download — the same version is embedded in the wrapper it generates):
+Locate the cached Gradle 9.5.0 binary and use it to generate the wrapper (this avoids any network download — the same version is embedded in the wrapper it generates). Do not cap `find`'s depth — the distribution's `bin/gradle.bat` is 4 levels below the dists directory shown here, and a shallower `-maxdepth` misses it:
 
 ```bash
-GRADLE_BIN=$(find "$HOME/.gradle/wrapper/dists/gradle-9.3.1-all" -maxdepth 3 -type f -name gradle.bat | head -1)
-"$GRADLE_BIN" wrapper --gradle-version 9.3.1 --distribution-type all
+GRADLE_BIN=$(find "$HOME/.gradle/wrapper/dists/gradle-9.5.0-bin" -type f -name gradle.bat | head -1)
+"$GRADLE_BIN" wrapper --gradle-version 9.5.0 --distribution-type bin
 ```
 
 Expected: creates `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`, `gradle/wrapper/gradle-wrapper.properties` in the project root.
@@ -123,7 +129,7 @@ Expected: creates `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`,
 - [ ] **Step 7: Verify the wrapper works**
 
 Run: `./gradlew tasks`
-Expected: `BUILD SUCCESSFUL` (lists `:app` is not yet available since the module doesn't exist yet — that's fine, this step only proves the wrapper itself runs).
+Expected: `BUILD SUCCESSFUL` (only root-project tasks are listed since `:app` doesn't exist yet — that's fine, this step only proves the wrapper itself runs).
 
 - [ ] **Step 8: Commit**
 
@@ -139,6 +145,7 @@ git commit -m "Scaffold Gradle project and wrapper"
 ### Task 2: App module — manifest, theme, launcher icon, blank Activity
 
 **Files:**
+- Modify: `settings.gradle.kts` (add the `include(":app")` line — see Step 1)
 - Create: `app/build.gradle.kts`
 - Create: `app/src/main/AndroidManifest.xml`
 - Create: `app/src/main/java/com/litzrsh/codeserver/MainActivity.kt`
@@ -154,12 +161,21 @@ git commit -m "Scaffold Gradle project and wrapper"
 - Consumes: `:app` module slot from `settings.gradle.kts` (Task 1).
 - Produces: `MainActivity` (launcher activity, currently just inflates a blank layout) and `R.id.webView` in `activity_main.xml` — Task 3 wires the `WebView` up.
 
-- [ ] **Step 1: Create `app/build.gradle.kts`**
+- [ ] **Step 1: Add `include(":app")` to `settings.gradle.kts`**
+
+Append this line to the end of the `settings.gradle.kts` created in Task 1:
+
+```kotlin
+include(":app")
+```
+
+- [ ] **Step 2: Create `app/build.gradle.kts`**
+
+Only the Android Gradle Plugin in `plugins {}` — no separate Kotlin plugin, and no `kotlinOptions {}` block (both are rejected by AGP 9's built-in Kotlin support; `compileOptions` alone is enough for the Kotlin compiler to pick up Java 17 target):
 
 ```kotlin
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {
@@ -184,10 +200,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
 }
 
 dependencies {
@@ -196,7 +208,7 @@ dependencies {
 }
 ```
 
-- [ ] **Step 2: Create `app/src/main/res/values/colors.xml`**
+- [ ] **Step 3: Create `app/src/main/res/values/colors.xml`**
 
 ```xml
 <resources>
@@ -204,7 +216,7 @@ dependencies {
 </resources>
 ```
 
-- [ ] **Step 3: Create `app/src/main/res/drawable/ic_launcher_foreground.xml`**
+- [ ] **Step 4: Create `app/src/main/res/drawable/ic_launcher_foreground.xml`**
 
 ```xml
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -227,7 +239,7 @@ dependencies {
 </vector>
 ```
 
-- [ ] **Step 4: Create `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`**
+- [ ] **Step 5: Create `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`**
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -237,9 +249,9 @@ dependencies {
 </adaptive-icon>
 ```
 
-- [ ] **Step 5: Create `app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml`**
+- [ ] **Step 6: Create `app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml`**
 
-Identical content to Step 4 (the system applies the round mask automatically):
+Identical content to Step 5 (the system applies the round mask automatically):
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -249,7 +261,7 @@ Identical content to Step 4 (the system applies the round mask automatically):
 </adaptive-icon>
 ```
 
-- [ ] **Step 6: Create `app/src/main/res/values/strings.xml`**
+- [ ] **Step 7: Create `app/src/main/res/values/strings.xml`**
 
 ```xml
 <resources>
@@ -258,7 +270,7 @@ Identical content to Step 4 (the system applies the round mask automatically):
 </resources>
 ```
 
-- [ ] **Step 7: Create `app/src/main/res/values/themes.xml`**
+- [ ] **Step 8: Create `app/src/main/res/values/themes.xml`**
 
 ```xml
 <resources>
@@ -271,7 +283,7 @@ Identical content to Step 4 (the system applies the round mask automatically):
 </resources>
 ```
 
-- [ ] **Step 8: Create `app/src/main/res/layout/activity_main.xml`**
+- [ ] **Step 9: Create `app/src/main/res/layout/activity_main.xml`**
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -281,7 +293,7 @@ Identical content to Step 4 (the system applies the round mask automatically):
     android:layout_height="match_parent" />
 ```
 
-- [ ] **Step 9: Create `app/src/main/java/com/litzrsh/codeserver/MainActivity.kt`**
+- [ ] **Step 10: Create `app/src/main/java/com/litzrsh/codeserver/MainActivity.kt`**
 
 ```kotlin
 package com.litzrsh.codeserver
@@ -298,7 +310,7 @@ class MainActivity : ComponentActivity() {
 }
 ```
 
-- [ ] **Step 10: Create `app/src/main/AndroidManifest.xml`**
+- [ ] **Step 11: Create `app/src/main/AndroidManifest.xml`**
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -328,15 +340,15 @@ class MainActivity : ComponentActivity() {
 </manifest>
 ```
 
-- [ ] **Step 11: Build the debug APK**
+- [ ] **Step 12: Build the debug APK**
 
 Run: `./gradlew assembleDebug`
-Expected: `BUILD SUCCESSFUL`, and `app/build/outputs/apk/debug/app-debug.apk` exists.
+Expected: `BUILD SUCCESSFUL`, and `app/build/outputs/apk/debug/app-debug.apk` exists. (This exact file set was already built successfully once during the plan's pre-flight check, so this should be a cache-warm, no-surprises build.)
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
-git add app/build.gradle.kts app/src/main/AndroidManifest.xml app/src/main/java app/src/main/res
+git add settings.gradle.kts app/build.gradle.kts app/src/main/AndroidManifest.xml app/src/main/java app/src/main/res
 git commit -m "Add app module skeleton with blank landscape Activity"
 ```
 
