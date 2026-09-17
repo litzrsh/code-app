@@ -564,9 +564,17 @@ With the app already showing the loaded page, disable the code-server host or th
 
 With the app open (loaded or not), press the hardware/gesture back button repeatedly. Expected: no visible effect — the app does not exit, and nothing navigates.
 
-- [ ] **Step 5: Record the result**
+- [ ] **Step 5: Verify the on-screen keyboard doesn't hide what you're typing**
 
-If all four checks pass, this task is complete — no code changes are expected from this task. If any check fails, file it as a bug against the relevant task above (Task 3 for load/immersive issues, Task 4 for failure-handling or back-button issues) rather than patching ad hoc.
+Tap into the editor and type a line of code using the on-screen keyboard. Expected: the caret/cursor line stays visible above the keyboard, not hidden behind it. (Added after the final review flagged this as plausible but unconfirmed: the app doesn't currently resize its content or inset around the keyboard, and this is the app's primary use case, so it needs a real answer from a device.)
+
+- [ ] **Step 6: Verify an outbound link can be recovered from**
+
+Open something in code-server that links off-host — the Help menu, an extension's marketplace page, a release-notes link, anything that isn't `192.168.0.2`. Expected: it opens in the device's normal browser app, not inside this WebView, and you're still able to get back to the code-server app afterward (e.g. via the device's app switcher, since the hardware back button inside this app does nothing). (Added after the final review: since back is fully suppressed, an outbound link that stayed in-WebView would have had no way out.)
+
+- [ ] **Step 7: Record the result**
+
+If all six checks pass, this task is complete — no code changes are expected from this task. If any check fails, file it as a bug against the relevant task above (Task 3 for load/immersive issues, Task 4 for failure-handling, back-button, or navigation issues) rather than patching ad hoc.
 
 ---
 
