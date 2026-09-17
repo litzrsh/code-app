@@ -1,9 +1,11 @@
 package com.litzrsh.codeserver
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.os.Bundle
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -14,6 +16,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
 private const val TARGET_URL = "http://192.168.0.2:3000"
+private const val TARGET_HOST = "192.168.0.2"
 
 class MainActivity : ComponentActivity() {
 
@@ -42,6 +45,28 @@ class MainActivity : ComponentActivity() {
                 if (!initialLoadFinished && request.isForMainFrame) {
                     showLoadFailureAndExit()
                 }
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView,
+                request: WebResourceRequest,
+                errorResponse: WebResourceResponse
+            ) {
+                super.onReceivedHttpError(view, request, errorResponse)
+                if (!initialLoadFinished && request.isForMainFrame) {
+                    showLoadFailureAndExit()
+                }
+            }
+
+            override fun shouldOverrideUrlLoading(
+                view: WebView,
+                request: WebResourceRequest
+            ): Boolean {
+                if (request.url.host == TARGET_HOST) {
+                    return false
+                }
+                startActivity(Intent(Intent.ACTION_VIEW, request.url))
+                return true
             }
 
             override fun onPageFinished(view: WebView, url: String?) {
