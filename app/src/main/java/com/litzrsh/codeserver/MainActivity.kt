@@ -1,11 +1,13 @@
 package com.litzrsh.codeserver
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Bundle
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -15,8 +17,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
-private const val TARGET_URL = "http://192.168.0.2:3000"
-private const val TARGET_HOST = "192.168.0.2"
+private const val TARGET_URL = "https://code.litzrsh.xyz"
+private const val TARGET_HOST = "code.litzrsh.xyz"
 
 class MainActivity : ComponentActivity() {
 
@@ -31,8 +33,13 @@ class MainActivity : ComponentActivity() {
         suppressBackButton()
 
         val webView = findViewById<WebView>(R.id.webView)
+        WebView.setWebContentsDebuggingEnabled(false)
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
+        webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        webView.settings.allowFileAccess = false
+        webView.settings.allowContentAccess = false
+        webView.settings.safeBrowsingEnabled = true
         webView.settings.useWideViewPort = true
         webView.settings.loadWithOverviewMode = true
         webView.webViewClient = object : WebViewClient() {
@@ -62,10 +69,24 @@ class MainActivity : ComponentActivity() {
                 view: WebView,
                 request: WebResourceRequest
             ): Boolean {
-                if (request.url.host == TARGET_HOST) {
+                val uri = request.url
+                // Keep the authenticated WebView on the server's HTTPS origin.
+                if (uri.scheme != "https" || uri.userInfo != null) return true
+                if (uri.host.equals(TARGET_HOST, ignoreCase = true) &&
+                    (uri.port == -1 || uri.port == 443)
+                ) {
                     return false
                 }
-                startActivity(Intent(Intent.ACTION_VIEW, request.url))
+                // Frames and automatic redirects must not launch other apps.
+                if (request.isForMainFrame && request.hasGesture()) {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, uri).apply {
+                            addCategory(Intent.CATEGORY_BROWSABLE)
+                        })
+                    } catch (_: ActivityNotFoundException) {
+                        // Leave the trusted page open if no browser is available.
+                    }
+                }
                 return true
             }
 
